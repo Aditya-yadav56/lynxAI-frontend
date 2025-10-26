@@ -138,7 +138,7 @@ const NavBar = ({ inChat = false, onNewChat }: { inChat?: boolean; onNewChat?: (
   }
 
   try {
-    const res = await fetch("http://localhost:5000/create-order", {
+const res = await fetch("https://lynx-backend-wwqe.onrender.com/create-order", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ amount: 99 }), // ₹99 for Pro
