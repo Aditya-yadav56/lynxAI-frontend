@@ -1,0 +1,1 @@
+export  const REACT_APP_OPENAI_API_KEY = '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'
