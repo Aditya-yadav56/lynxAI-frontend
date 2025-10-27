@@ -130,11 +130,11 @@ export class OpenAIChat {
       const useResponsesAPI = this.useWebSearch || options.useTools;
 
       if (useResponsesAPI) {
-        return await this.askWithResponsesAPI(input, options);
+        return await this.askWithResponsesAPI(options);
       } else if (this.useReasoning) {
-        return await this.askWithReasoning(input, options);
+        return await this.askWithReasoning(options);
       } else {
-        return await this.askStandard(input, options);
+        return await this.askStandard(options);
       }
     } catch (err) {
       this.isLoading = false;
@@ -147,7 +147,7 @@ export class OpenAIChat {
   /**
    * Standard Chat Completions API call
    */
-  private async askStandard(input: string, options: AskOptions = {}): Promise<AIResponse> {
+  private async askStandard(options: AskOptions = {}): Promise<AIResponse> {
     const response: AxiosResponse<OpenAIChatResponse> = await axios.post(
       "https://api.openai.com/v1/chat/completions",
       {
@@ -178,7 +178,7 @@ export class OpenAIChat {
   /**
    * Responses API call with web search and tools
    */
-  private async askWithResponsesAPI(input: string, options: AskOptions = {}): Promise<AIResponse> {
+  private async askWithResponsesAPI(options: AskOptions = {}): Promise<AIResponse> {
     const tools: Tool[] = [];
 
     // Add web search tool if enabled
@@ -195,9 +195,12 @@ export class OpenAIChat {
       tools.push(...options.tools);
     }
 
+    // Get the last user message
+    const lastMessage = this.chatMessages[this.chatMessages.length - 1];
+
     const requestBody = {
       model: options.model || "gpt-4o",
-      input: input,
+      input: lastMessage.content,
       tools: tools.length > 0 ? tools : undefined,
       tool_choice: options.toolChoice || "auto",
       temperature: options.temperature,
@@ -249,7 +252,7 @@ export class OpenAIChat {
   /**
    * Chat Completions API call with reasoning models (o1, o3, etc.)
    */
-  private async askWithReasoning(input: string, options: AskOptions = {}): Promise<AIResponse> {
+  private async askWithReasoning(options: AskOptions = {}): Promise<AIResponse> {
     const response: AxiosResponse<OpenAIChatResponse> = await axios.post(
       "https://api.openai.com/v1/chat/completions",
       {

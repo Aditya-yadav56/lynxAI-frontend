@@ -166,7 +166,7 @@ function Root() {
     return () => unsubscribe();
   }, [userId]);
 
-  const handleSelectConversation = (conversationId: string, messages: Message[]) => {
+  const handleSelectConversation = (conversationId: string) => {
     // Navigate to the conversation URL
     navigate(`/chat/${conversationId}`);
   };

@@ -12,8 +12,6 @@ import { collection, serverTimestamp } from "firebase/firestore";
 import { db, auth } from '@/(auth)/firebase';
 import { setDoc, doc } from 'firebase/firestore';
 
-
-
 interface ChatScreenProps {
   conversationId: string | null;
   initialMessage: string;
@@ -62,7 +60,6 @@ export function ChatScreen({
   const [isLoading, setIsLoading] = useState(false);
   const [chatService] = useState(new OpenAIChat());
   const [speakingIndex, setSpeakingIndex] = useState<number | null>(null);
-  const [speechSynthesisInstance, setSpeechSynthesisInstance] = useState<SpeechSynthesisUtterance | null>(null);
   const [conversationId, setConversationId] = useState<string | null>(propsConversationId);
   const [hasProcessedInitial, setHasProcessedInitial] = useState(false);
   const [aiMode, setAiMode] = useState<AIMode>('auto');
@@ -136,7 +133,6 @@ export function ChatScreen({
       setSpeakingIndex(null);
     };
 
-    setSpeechSynthesisInstance(utterance);
     setSpeakingIndex(index);
     window.speechSynthesis.speak(utterance);
   };
