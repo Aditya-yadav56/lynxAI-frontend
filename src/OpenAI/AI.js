@@ -1,5 +1,5 @@
 import axios from "axios";
-import { REACT_APP_OPENAI_API_KEY } from "../constants/OpenAI";
+const REACT_APP_OPENAI_API_KEY = import.meta.env.VITE_OPENAI_API_KEY;
 
 export class OpenAIChat {
   constructor() {
@@ -51,7 +51,6 @@ export class OpenAIChat {
       throw new Error(err.message || "AI request failed");
     }
   }
-
   /**
    * Standard Chat Completions API call
    */
