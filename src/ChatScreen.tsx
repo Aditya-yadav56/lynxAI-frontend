@@ -1,5 +1,4 @@
 import { useState, useEffect, useRef } from 'react';
-import { useLocation } from 'react-router-dom';
 import { ArrowUpIcon } from "lucide-react";
 import { IconPlus } from "@tabler/icons-react";
 import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupText, InputGroupTextarea } from './components/ui/input-group';
@@ -13,10 +12,12 @@ import { collection, serverTimestamp } from "firebase/firestore";
 import { db, auth } from '@/(auth)/firebase';
 import { setDoc, doc } from 'firebase/firestore';
 
+
+
 interface ChatScreenProps {
   conversationId: string | null;
   initialMessage: string;
-  loadedMessages: any[];
+  loadedMessages: Message[];
   onBack: () => void;
   onNewChat: () => void;
   personality?: string;
@@ -24,12 +25,28 @@ interface ChatScreenProps {
 
 type AIMode = 'auto' | 'thinking' | 'web_search';
 
+interface Citation {
+  url: string;
+  title?: string;
+}
+
 interface Message {
   role: string;
   content: string;
-  citations?: Array<{ url: string; title?: string }>;
+  citations?: Citation[];
   reasoningTokens?: number;
   mode?: AIMode;
+}
+
+interface AIResponse {
+  content?: string | ContentBlock[];
+  citations?: Citation[];
+  reasoningTokens?: number;
+}
+
+interface ContentBlock {
+  type?: string;
+  text?: string;
 }
 
 export function ChatScreen({ 
@@ -71,12 +88,12 @@ export function ChatScreen({
     scrollToBottom();
   }, [messages, isLoading]);
 
-  const saveConversation = async (uid: string, conversationId: string, messages: any[]) => {
+  const saveConversation = async (uid: string, conversationId: string, messages: Message[]) => {
     if (!uid || !conversationId) return;
 
     // Clean messages to remove undefined fields
     const cleanMessages = messages.map(msg => {
-      const cleanMsg: any = {
+      const cleanMsg: Partial<Message> = {
         role: msg.role,
         content: msg.content
       };
@@ -171,20 +188,23 @@ export function ChatScreen({
         ? `[System instruction: ${personality}]\n\nUser: ${userMessage}`
         : userMessage;
 
-      const response = await chatService.ask(messageWithPersonality);
+      const response = await chatService.ask(messageWithPersonality) as string | AIResponse;
 
       // Extract text content from response
       let contentText = '';
+      let citations: Citation[] | undefined;
+      let reasoningTokens: number | undefined;
+
       if (typeof response === 'string') {
         contentText = response;
-      } else if (response.content) {
+      } else if (response && typeof response === 'object') {
         // Handle structured response
         if (typeof response.content === 'string') {
           contentText = response.content;
         } else if (Array.isArray(response.content)) {
           // Extract text from array of content blocks
           contentText = response.content
-            .map(item => {
+            .map((item: string | ContentBlock) => {
               if (typeof item === 'string') return item;
               if (item.type === 'text') return item.text;
               return '';
@@ -192,6 +212,8 @@ export function ChatScreen({
             .filter(Boolean)
             .join('\n');
         }
+        citations = response.citations;
+        reasoningTokens = response.reasoningTokens;
       }
 
       setMessages(prev => {
@@ -200,8 +222,8 @@ export function ChatScreen({
           { 
             role: "assistant", 
             content: contentText || "Sorry, I couldn't generate a response.",
-            citations: response.citations,
-            reasoningTokens: response.reasoningTokens,
+            citations: citations,
+            reasoningTokens: reasoningTokens,
             mode: aiMode
           }
         ];
@@ -243,7 +265,7 @@ export function ChatScreen({
     await handleAIResponse(userMessage);
   };
 
-  const handleKeyPress = (event: React.KeyboardEvent) => {
+  const handleKeyPress = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();
       handleSend();
@@ -283,6 +305,7 @@ export function ChatScreen({
       handleAIResponse(initialMessage);
       setHasProcessedInitial(true);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialMessage, hasProcessedInitial, conversationId, loadedMessages]);
 
   const getModeLabel = () => {

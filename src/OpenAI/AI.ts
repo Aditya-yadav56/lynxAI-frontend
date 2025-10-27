@@ -1,34 +1,125 @@
 import axios from "axios";
+import type { AxiosResponse } from "axios";
 const REACT_APP_OPENAI_API_KEY = import.meta.env.VITE_OPENAI_API_KEY;
 
+// Interfaces
+interface ChatMessage {
+  role: "user" | "assistant" | "system";
+  content: string;
+}
+
+interface Citation {
+  type: string;
+  url: string;
+  title?: string;
+}
+
+interface ContentBlock {
+  type: string;
+  text?: string;
+  output_text?: string;
+  annotations?: Citation[];
+}
+
+interface MessageItem {
+  type: string;
+  content?: ContentBlock[];
+}
+
+interface SearchFilters {
+  allowed_domains?: string[];
+  blocked_domains?: string[];
+  location?: {
+    country?: string;
+    city?: string;
+    region?: string;
+  };
+}
+
+interface Tool {
+  type: string;
+  filters?: SearchFilters;
+}
+
+interface AskOptions {
+  model?: string;
+  temperature?: number;
+  maxTokens?: number;
+  maxCompletionTokens?: number;
+  useTools?: boolean;
+  tools?: Tool[];
+  toolChoice?: string;
+  searchFilters?: SearchFilters;
+}
+
+interface AIResponse {
+  content: string;
+  citations?: Citation[] | null;
+  reasoningTokens?: number | null;
+  responseId?: string;
+  totalTokens?: number;
+}
+
+interface OpenAIUsage {
+  total_tokens?: number;
+  completion_tokens_details?: {
+    reasoning_tokens?: number;
+  };
+}
+
+interface OpenAIChoice {
+  message: {
+    content: string;
+  };
+}
+
+interface OpenAIChatResponse {
+  choices: OpenAIChoice[];
+  usage?: OpenAIUsage;
+}
+
+interface OpenAIResponsesAPIResponse {
+  id: string;
+  output?: MessageItem[];
+}
+
 export class OpenAIChat {
+  private chatMessages: ChatMessage[];
+  private isLoading: boolean;
+  private useWebSearch: boolean;
+  private useReasoning: boolean;
+  private reasoningEffort: "low" | "medium" | "high";
+
   constructor() {
     this.chatMessages = [];
     this.isLoading = false;
     this.useWebSearch = false;
     this.useReasoning = false;
+    this.reasoningEffort = "medium";
   }
 
   /**
    * Enable or disable web search functionality
-   * @param {boolean} enabled - Whether to enable web search
+   * @param enabled - Whether to enable web search
    */
-  setWebSearch(enabled) {
+  setWebSearch(enabled: boolean): void {
     this.useWebSearch = enabled;
   }
 
   /**
    * Enable or disable reasoning (thinking) functionality
-   * @param {boolean} enabled - Whether to enable reasoning
-   * @param {string} effort - Reasoning effort level: "low", "medium", or "high"
+   * @param enabled - Whether to enable reasoning
+   * @param effort - Reasoning effort level: "low", "medium", or "high"
    */
-  setReasoning(enabled, effort = "medium") {
+  setReasoning(enabled: boolean, effort: "low" | "medium" | "high" = "medium"): void {
     this.useReasoning = enabled;
     this.reasoningEffort = effort;
   }
 
-  async ask(input, options = {}) {
-    if (!input.trim()) return;
+  async ask(input: string, options: AskOptions = {}): Promise<AIResponse> {
+    if (!input.trim()) {
+      throw new Error("Input cannot be empty");
+    }
 
     // Add user message
     this.chatMessages.push({ role: "user", content: input });
@@ -37,7 +128,7 @@ export class OpenAIChat {
     try {
       // Choose between Responses API (for web search/tools) or Chat Completions API
       const useResponsesAPI = this.useWebSearch || options.useTools;
-      
+
       if (useResponsesAPI) {
         return await this.askWithResponsesAPI(input, options);
       } else if (this.useReasoning) {
@@ -47,15 +138,17 @@ export class OpenAIChat {
       }
     } catch (err) {
       this.isLoading = false;
+      const errorMessage = err instanceof Error ? err.message : "AI request failed";
       console.error("AI Error:", err);
-      throw new Error(err.message || "AI request failed");
+      throw new Error(errorMessage);
     }
   }
+
   /**
    * Standard Chat Completions API call
    */
-  async askStandard(input, options = {}) {
-    const response = await axios.post(
+  private async askStandard(input: string, options: AskOptions = {}): Promise<AIResponse> {
+    const response: AxiosResponse<OpenAIChatResponse> = await axios.post(
       "https://api.openai.com/v1/chat/completions",
       {
         model: options.model || "gpt-4o",
@@ -74,25 +167,26 @@ export class OpenAIChat {
     const aiMessage = response.data.choices[0].message.content;
     this.chatMessages.push({ role: "assistant", content: aiMessage });
     this.isLoading = false;
+
     return {
       content: aiMessage,
       citations: null,
-      reasoningTokens: null
+      reasoningTokens: null,
     };
   }
 
   /**
    * Responses API call with web search and tools
    */
-  async askWithResponsesAPI(input, options = {}) {
-    const tools = [];
-    
+  private async askWithResponsesAPI(input: string, options: AskOptions = {}): Promise<AIResponse> {
+    const tools: Tool[] = [];
+
     // Add web search tool if enabled
     if (this.useWebSearch) {
       tools.push({
         type: "web_search",
         // Optional filters for web search
-        ...(options.searchFilters && { filters: options.searchFilters })
+        ...(options.searchFilters && { filters: options.searchFilters }),
       });
     }
 
@@ -111,7 +205,7 @@ export class OpenAIChat {
       include: ["web_search_call.action.sources"],
     };
 
-    const response = await axios.post(
+    const response: AxiosResponse<OpenAIResponsesAPIResponse> = await axios.post(
       "https://api.openai.com/v1/responses",
       requestBody,
       {
@@ -125,17 +219,17 @@ export class OpenAIChat {
     // Extract text content and citations from response
     const output = response.data.output || [];
     let aiMessage = "";
-    let citations = [];
-    
+    const citations: Citation[] = [];
+
     for (const item of output) {
       if (item.type === "message" && item.content) {
         for (const content of item.content) {
           if (content.type === "output_text" || content.type === "text") {
-            aiMessage += content.text || content.output_text || '';
+            aiMessage += content.text || content.output_text || "";
           }
           // Extract citations if available
           if (content.annotations) {
-            citations.push(...content.annotations.filter(a => a.type === "url_citation"));
+            citations.push(...content.annotations.filter((a) => a.type === "url_citation"));
           }
         }
       }
@@ -143,20 +237,20 @@ export class OpenAIChat {
 
     this.chatMessages.push({ role: "assistant", content: aiMessage });
     this.isLoading = false;
-    
+
     return {
       content: aiMessage || "No response generated.",
       citations: citations.length > 0 ? citations : null,
       responseId: response.data.id,
-      reasoningTokens: null
+      reasoningTokens: null,
     };
   }
 
   /**
    * Chat Completions API call with reasoning models (o1, o3, etc.)
    */
-  async askWithReasoning(input, options = {}) {
-    const response = await axios.post(
+  private async askWithReasoning(input: string, options: AskOptions = {}): Promise<AIResponse> {
+    const response: AxiosResponse<OpenAIChatResponse> = await axios.post(
       "https://api.openai.com/v1/chat/completions",
       {
         model: options.model || "o1", // Use o1, o1-mini, o3-mini, or o4-mini
@@ -176,36 +270,36 @@ export class OpenAIChat {
 
     const aiMessage = response.data.choices[0].message.content;
     const reasoningTokens = response.data.usage?.completion_tokens_details?.reasoning_tokens;
-    
+
     this.chatMessages.push({ role: "assistant", content: aiMessage });
     this.isLoading = false;
-    
+
     return {
       content: aiMessage,
       citations: null,
-      reasoningTokens: reasoningTokens, // Hidden "thinking" tokens
-      totalTokens: response.data.usage?.total_tokens
+      reasoningTokens: reasoningTokens || null,
+      totalTokens: response.data.usage?.total_tokens,
     };
   }
 
   /**
    * Get conversation messages
    */
-  getMessages() {
+  getMessages(): ChatMessage[] {
     return this.chatMessages;
   }
 
   /**
    * Clear conversation history
    */
-  clear() {
+  clear(): void {
     this.chatMessages = [];
   }
 
   /**
    * Get loading state
    */
-  getLoadingState() {
+  getLoadingState(): boolean {
     return this.isLoading;
   }
 }

@@ -22,25 +22,50 @@ import SideBar from "./SideBar.tsx";
 import { ChatScreen } from "./ChatScreen.tsx";
 import { SidebarProvider } from "@/components/ui/sidebar";
 import { db, auth } from "@/(auth)/firebase";
-import { doc, getDoc, onSnapshot } from "firebase/firestore";
+import { doc, getDoc, onSnapshot, DocumentSnapshot,  } from "firebase/firestore";
 import { onAuthStateChanged } from "firebase/auth";
-
+import type { User } from "firebase/auth";
+import type {DocumentData} from "firebase/firestore";
 interface ChatRouteProps {
   personality: string;
 }
 
+interface Message {
+  role: string;
+  content: string;
+  citations?: Array<{ url: string; title?: string }>;
+  reasoningTokens?: number;
+  mode?: 'auto' | 'thinking' | 'web_search';
+}
+
+interface LocationState {
+  initialMessage?: string;
+  aiMode?: 'auto' | 'thinking' | 'web_search';
+}
+
+interface ConversationData {
+  messages?: Message[];
+  createdAt?: any;
+}
+
+interface PersonalityData {
+  prompt?: string;
+}
+
 function ChatRoute({ personality }: ChatRouteProps) {
-  const { conversationId } = useParams();
+  const { conversationId } = useParams<{ conversationId: string }>();
   const navigate = useNavigate();
   const location = useLocation();
-  const [loadedMessages, setLoadedMessages] = useState<any[]>([]);
+  const [loadedMessages, setLoadedMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(true);
   const [initialMessage, setInitialMessage] = useState("");
 
   useEffect(() => {
+    const state = location.state as LocationState | null;
+    
     // Check for initial message from navigation state
-    if (location.state?.initialMessage) {
-      setInitialMessage(location.state.initialMessage);
+    if (state?.initialMessage) {
+      setInitialMessage(state.initialMessage);
       setLoading(false);
       // Clear the state after reading it
       window.history.replaceState({}, document.title);
@@ -61,10 +86,10 @@ function ChatRoute({ personality }: ChatRouteProps) {
 
       try {
         const docRef = doc(db, "users", user.uid, "conversations", conversationId);
-        const docSnap = await getDoc(docRef);
+        const docSnap: DocumentSnapshot<DocumentData> = await getDoc(docRef);
 
         if (docSnap.exists()) {
-          const data = docSnap.data();
+          const data = docSnap.data() as ConversationData;
           setLoadedMessages(data.messages || []);
         }
       } catch (error) {
@@ -104,7 +129,7 @@ function Root() {
 
   // Listen to auth state changes
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
+    const unsubscribe = onAuthStateChanged(auth, (user: User | null) => {
       if (user) {
         setUserId(user.uid);
       } else {
@@ -125,9 +150,9 @@ function Root() {
     // Set up real-time listener for personality changes
     const unsubscribe = onSnapshot(
       personalityDocRef,
-      (docSnap) => {
+      (docSnap: DocumentSnapshot<DocumentData>) => {
         if (docSnap.exists()) {
-          const data = docSnap.data();
+          const data = docSnap.data() as PersonalityData;
           setAiPersonality(data.prompt || "");
         } else {
           setAiPersonality("");
@@ -141,14 +166,11 @@ function Root() {
     return () => unsubscribe();
   }, [userId]);
 
-  const handleSelectConversation = (conversationId: string, messages: any[]) => {
+  const handleSelectConversation = (conversationId: string, messages: Message[]) => {
     // Navigate to the conversation URL
     navigate(`/chat/${conversationId}`);
   };
 
-  const handleNewChat = () => {
-    navigate("/");
-  };
 
   const handlePersonalityChange = (personality: string) => {
     setAiPersonality(personality);
