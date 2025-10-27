@@ -8,6 +8,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { auth } from '@/(auth)/firebase'
 import { onAuthStateChanged, signInWithEmailAndPassword } from 'firebase/auth'
+import type { User } from 'firebase/auth'
 import { Dialog, DialogContent, DialogTitle, DialogClose, DialogFooter } from './components/ui/dialog'
 import { Button } from './components/ui/button'
 import { Input } from './components/ui/input'
@@ -25,7 +26,7 @@ function App({ personality = "" }: AppProps) {
   document.documentElement.classList.add('dark');
   const navigate = useNavigate();
   const [input, setInput] = useState("");
-  const [user, setUser] = useState(null);
+  const [user, setUser] = useState<User | null>(null);
   const [signInOpen, setSignInOpen] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -79,11 +80,12 @@ function App({ personality = "" }: AppProps) {
       setEmail("");
       setPassword("");
     } catch (error) {
-      alert(error.message);
+      const errorMessage = error instanceof Error ? error.message : "An error occurred";
+      alert(errorMessage);
     }
   };
 
-  const handleKeyPress = (event) => {
+  const handleKeyPress = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();
       handleSend();

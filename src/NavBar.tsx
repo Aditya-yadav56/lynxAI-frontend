@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import {
   NavigationMenu,
   NavigationMenuItem,
@@ -20,7 +20,7 @@ import {
 import { Label } from "./components/ui/label";
 import { Input } from "./components/ui/input";
 import { Check, Sparkles, Zap, Crown } from "lucide-react";
-
+import type { User } from "firebase/auth";
 import { auth } from "@/(auth)/firebase";
 import {
   createUserWithEmailAndPassword,
@@ -31,36 +31,111 @@ import {
   onAuthStateChanged,
 } from "firebase/auth";
 
-const NavBar = ({ inChat = false, onNewChat }: { inChat?: boolean; onNewChat?: () => void }) => {
+// Define proper types
+interface NavBarProps {
+  inChat?: boolean;
+  onNewChat?: () => void;
+}
+
+interface Currency {
+  symbol: string;
+  code: string;
+  price: number;
+  originalPrice: number;
+}
+
+interface LocationResponse {
+  country_code?: string;
+}
+
+interface RazorpayOrder {
+  id: string;
+  amount: number;
+  currency: string;
+}
+
+interface RazorpayResponse {
+  razorpay_payment_id: string;
+  razorpay_order_id: string;
+  razorpay_signature: string;
+}
+
+interface RazorpayOptions {
+  key: string;
+  amount: number;
+  currency: string;
+  name: string;
+  description: string;
+  order_id: string;
+  handler: (response: RazorpayResponse) => void;
+  prefill: {
+    name: string;
+    email: string;
+  };
+  theme: {
+    color: string;
+  };
+}
+
+// Add Razorpay to window object
+declare global {
+  interface Window {
+    Razorpay: new (options: RazorpayOptions) => {
+      open: () => void;
+    };
+  }
+}
+
+const NavBar = ({ inChat = false, onNewChat }: NavBarProps) => {
   const [signInEmail, setSignInEmail] = useState("");
   const [signInPassword, setSignInPassword] = useState("");
   const [signUpEmail, setSignUpEmail] = useState("");
   const [signUpPassword, setSignUpPassword] = useState("");
   const [signUpConfirm, setSignUpConfirm] = useState("");
-  const [user, setUser] = useState(null);
+  const [user, setUser] = useState<User | null>(null);
   const [signInOpen, setSignInOpen] = useState(false);
   const [signUpOpen, setSignUpOpen] = useState(false);
   const [pricingOpen, setPricingOpen] = useState(false);
-  const [currency, setCurrency] = useState({ symbol: "₹", code: "INR", price: 99, originalPrice: 399 });
+  const [currency, setCurrency] = useState<Currency>({
+    symbol: "₹",
+    code: "INR",
+    price: 99,
+    originalPrice: 399,
+  });
 
   // Detect user's country and set currency
   useEffect(() => {
     const detectCurrency = async () => {
       try {
         // Try to get user's location via IP geolocation
-        const response = await fetch('https://ipapi.co/json/');
-        const data = await response.json();
-        
-        if (data.country_code === 'IN') {
-          setCurrency({ symbol: "₹", code: "INR", price: 99, originalPrice: 399 });
+        const response = await fetch("https://ipapi.co/json/");
+        const data = (await response.json()) as LocationResponse;
+
+        if (data.country_code === "IN") {
+          setCurrency({
+            symbol: "₹",
+            code: "INR",
+            price: 99,
+            originalPrice: 399,
+          });
         } else {
           // For all other countries, show USD
-          setCurrency({ symbol: "$", code: "USD", price: 2, originalPrice: 8 });
+          setCurrency({
+            symbol: "$",
+            code: "USD",
+            price: 2,
+            originalPrice: 8,
+          });
         }
       } catch (error) {
         console.error("Currency detection failed, defaulting to INR:", error);
         // Default to INR if detection fails
-        setCurrency({ symbol: "₹", code: "INR", price: 99, originalPrice: 399 });
+        setCurrency({
+          symbol: "₹",
+          code: "INR",
+          price: 99,
+          originalPrice: 399,
+        });
       }
     };
 
@@ -87,7 +162,9 @@ const NavBar = ({ inChat = false, onNewChat }: { inChat?: boolean; onNewChat?: (
       setSignInOpen(false);
       setSignUpOpen(false);
     } catch (error) {
-      console.error("Google Auth Error:", error.message);
+      const errorMessage =
+        error instanceof Error ? error.message : "An error occurred";
+      console.error("Google Auth Error:", errorMessage);
     }
   };
 
@@ -108,8 +185,10 @@ const NavBar = ({ inChat = false, onNewChat }: { inChat?: boolean; onNewChat?: (
       setSignUpPassword("");
       setSignUpConfirm("");
     } catch (error) {
-      console.error("Sign Up Error:", error.message);
-      alert(error.message);
+      const errorMessage =
+        error instanceof Error ? error.message : "An error occurred";
+      console.error("Sign Up Error:", errorMessage);
+      alert(errorMessage);
     }
   };
 
@@ -125,52 +204,56 @@ const NavBar = ({ inChat = false, onNewChat }: { inChat?: boolean; onNewChat?: (
       setSignInEmail("");
       setSignInPassword("");
     } catch (error) {
-      console.error("Sign In Error:", error.message);
-      alert(error.message);
+      const errorMessage =
+        error instanceof Error ? error.message : "An error occurred";
+      console.error("Sign In Error:", errorMessage);
+      alert(errorMessage);
     }
   };
 
   const handleSubscribe = async () => {
-  if (!user) {
-    setPricingOpen(false);
-    setSignUpOpen(true);
-    return;
-  }
+    if (!user) {
+      setPricingOpen(false);
+      setSignUpOpen(true);
+      return;
+    }
 
-  try {
-const res = await fetch("https://lynx-backend-wwqe.onrender.com/create-order", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ amount: 99 }), // ₹99 for Pro
-    });
-    const order = await res.json();
+    try {
+      const res = await fetch(
+        "https://lynx-backend-wwqe.onrender.com/create-order",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ amount: 99 }), // ₹99 for Pro
+        }
+      );
+      const order = (await res.json()) as RazorpayOrder;
 
-    const options = {
-      key: "rzp_test_RXvVfYiWIjkUTz", // only key_id
-      amount: order.amount,
-      currency: order.currency,
-      name: "Lynx AI",
-      description: "Pro Plan",
-      order_id: order.id,
-      handler: function (response) {
-        alert("Payment successful! 🎉");
-        console.log(response); // contains payment_id, order_id, signature
-      },
-      prefill: {
-        name: user.displayName || "User",
-        email: user.email,
-      },
-      theme: { color: "#7c3aed" },
-    };
+      const options: RazorpayOptions = {
+        key: "rzp_test_RXvVfYiWIjkUTz", // only key_id
+        amount: order.amount,
+        currency: order.currency,
+        name: "Lynx AI",
+        description: "Pro Plan",
+        order_id: order.id,
+        handler: function (response: RazorpayResponse) {
+          alert("Payment successful! 🎉");
+          console.log(response); // contains payment_id, order_id, signature
+        },
+        prefill: {
+          name: user.displayName || "User",
+          email: user.email || "",
+        },
+        theme: { color: "#7c3aed" },
+      };
 
-    const rzp = new window.Razorpay(options);
-    rzp.open();
-  } catch (err) {
-    console.error(err);
-    alert("Payment failed, check console!");
-  }
-};
-
+      const rzp = new window.Razorpay(options);
+      rzp.open();
+    } catch (err) {
+      console.error(err);
+      alert("Payment failed, check console!");
+    }
+  };
 
   return (
     <div className="sticky top-3 z-50 flex justify-center mt-3">
@@ -210,7 +293,7 @@ const res = await fetch("https://lynx-backend-wwqe.onrender.com/create-order", {
                     placeholder="name@example.com"
                     value={signInEmail}
                     onChange={(e) => setSignInEmail(e.target.value)}
-                    onKeyPress={(e) => e.key === 'Enter' && handleSignIn()}
+                    onKeyPress={(e) => e.key === "Enter" && handleSignIn()}
                   />
                   <Label>Password</Label>
                   <Input
@@ -218,7 +301,7 @@ const res = await fetch("https://lynx-backend-wwqe.onrender.com/create-order", {
                     placeholder="Enter your password"
                     value={signInPassword}
                     onChange={(e) => setSignInPassword(e.target.value)}
-                    onKeyPress={(e) => e.key === 'Enter' && handleSignIn()}
+                    onKeyPress={(e) => e.key === "Enter" && handleSignIn()}
                   />
                 </div>
 
@@ -273,7 +356,7 @@ const res = await fetch("https://lynx-backend-wwqe.onrender.com/create-order", {
                     placeholder="Confirm your password"
                     value={signUpConfirm}
                     onChange={(e) => setSignUpConfirm(e.target.value)}
-                    onKeyPress={(e) => e.key === 'Enter' && handleSignUp()}
+                    onKeyPress={(e) => e.key === "Enter" && handleSignUp()}
                   />
                 </div>
 
@@ -340,7 +423,9 @@ const res = await fetch("https://lynx-backend-wwqe.onrender.com/create-order", {
                   <span className="text-4xl font-bold">₹0</span>
                   <span className="text-gray-500">/month</span>
                 </div>
-                <p className="text-sm text-gray-500">Perfect for getting started</p>
+                <p className="text-sm text-gray-500">
+                  Perfect for getting started
+                </p>
               </div>
 
               <div className="space-y-3">
@@ -381,17 +466,23 @@ const res = await fetch("https://lynx-backend-wwqe.onrender.com/create-order", {
                   <h3 className="text-xl font-semibold">Pro</h3>
                 </div>
                 <div className="flex items-baseline gap-1">
-                  <span className="text-4xl font-bold">₹99</span>
+                  <span className="text-4xl font-bold">{currency.symbol}{currency.price}</span>
                   <span className="text-gray-500">/month</span>
-                  <p className="text-purple-400 line-through font-bold">₹399/month</p>
+                  <p className="text-purple-400 line-through font-bold">
+                    {currency.symbol}{currency.originalPrice}/month
+                  </p>
                 </div>
-                <p className="text-sm text-gray-500">For power users and professionals</p>
+                <p className="text-sm text-gray-500">
+                  For power users and professionals
+                </p>
               </div>
 
               <div className="space-y-3">
                 <div className="flex items-start gap-2">
                   <Check className="w-4 h-4 text-purple-400 mt-0.5" />
-                  <span className="text-sm font-medium">Everything in Free, plus:</span>
+                  <span className="text-sm font-medium">
+                    Everything in Free, plus:
+                  </span>
                 </div>
                 <div className="flex items-start gap-2">
                   <Check className="w-4 h-4 text-purple-400 mt-0.5" />
@@ -399,7 +490,9 @@ const res = await fetch("https://lynx-backend-wwqe.onrender.com/create-order", {
                 </div>
                 <div className="flex items-start gap-2">
                   <Check className="w-4 h-4 text-purple-400 mt-0.5" />
-                  <span className="text-sm">Advanced AI modes (Thinking & Web Search)</span>
+                  <span className="text-sm">
+                    Advanced AI modes (Thinking & Web Search)
+                  </span>
                 </div>
                 <div className="flex items-start gap-2">
                   <Check className="w-4 h-4 text-purple-400 mt-0.5" />
@@ -423,8 +516,8 @@ const res = await fetch("https://lynx-backend-wwqe.onrender.com/create-order", {
                 </div>
               </div>
 
-              <Button 
-                className="w-full bg-purple-500 hover:bg-purple-600" 
+              <Button
+                className="w-full bg-purple-500 hover:bg-purple-600"
                 onClick={handleSubscribe}
               >
                 <Zap className="w-4 h-4 mr-2" />
