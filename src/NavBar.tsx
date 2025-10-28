@@ -230,7 +230,7 @@ const NavBar = ({ inChat = false, onNewChat }: NavBarProps) => {
       const order = (await res.json()) as RazorpayOrder;
 
       const options: RazorpayOptions = {
-        key: "rzp_test_RXvVfYiWIjkUTz", // only key_id
+        key: "rzp_live_RYmzLFC81ZtW3U", // only key_id
         amount: order.amount,
         currency: order.currency,
         name: "Lynx AI",
